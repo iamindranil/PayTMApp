@@ -1,6 +1,10 @@
 import db from "@repo/db/client";
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcrypt";
+import { JWT } from "next-auth/jwt";
+import { Session } from "next-auth";
+
+
 
 export const authOptions = {
     providers: [
@@ -55,11 +59,13 @@ export const authOptions = {
     ],
     secret: process.env.JWT_SECRET || "secret",
     callbacks: {
-        //need to fix :any
-        async session({ token, session }: any) {
-            session.user.id = token.sub
-
-            return session
+        async session({ token, session }: {token:JWT,session:Session}) {
+            const user = {...session.user, id: token.sub};
+            const newSession = {...session, user}
+            // if(token) {
+            //     // (session.user).id=token.sub
+            //   }
+            return newSession
         }
     }
   }
