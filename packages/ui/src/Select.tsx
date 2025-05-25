@@ -12,3 +12,4 @@ export const Select = ({ options, onSelect }: {
         {options.map(option => <option value={option.key}>{option.value}</option>)}
   </select>
 }
+
