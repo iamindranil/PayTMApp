@@ -3,6 +3,6 @@
   "compilerOptions": {
     "outDir": "dist"
   },
-  "include": ["index.ts", "prisma/**/*"],
+  "include": ["index.ts", "ledger/**/*", "prisma/**/*", "scripts/**/*"],
   "exclude": ["node_modules", "dist"]
 }

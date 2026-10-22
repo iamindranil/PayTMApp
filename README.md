@@ -42,7 +42,14 @@ graph TD
 
 ## ⚡ Key Engineering Highlights
 
-### 1. Concurrency Control & Double-Spending Prevention
+### 1. Immutable Double-Entry Bookkeeping Ledger
+* Implements the gold-standard fintech accounting invariant:
+  $$\sum \text{Debits} = \sum \text{Credits}$$
+* Financial events (bank deposits, P2P transfers, QR checkout) atomically write balanced `JournalEntry` and `LedgerEntry` legs across `BANK_ESCROW`, `USER_WALLET`, and `MERCHANT_WALLET` accounts.
+* Prevents silent financial leaks or unbacked money creation.
+* Comes with an automated reconciliation CLI (`npm run reconcile`) that audits fast-read cached balances against the immutable ledger.
+
+### 2. Concurrency Control & Double-Spending Prevention
 * P2P money transfers execute inside interactive database transactions with **PostgreSQL row-level locking**:
   ```sql
   SELECT * FROM "Balance" WHERE "userId" = $1 FOR UPDATE

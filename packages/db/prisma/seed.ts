@@ -1,12 +1,21 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, EntryDirection, JournalEventType, LedgerAccountType } from "@prisma/client";
 import bcrypt from "bcrypt";
+import {
+  getOrCreateSystemAccount,
+  getOrCreateUserAccount,
+  getOrCreateMerchantAccount,
+  postJournalEntry,
+} from "../ledger";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Clearing entire database...");
+  console.log("Clearing entire database (including ledger)...");
 
   // Delete in reverse relation order to avoid foreign key constraints
+  await prisma.ledgerEntry.deleteMany({});
+  await prisma.journalEntry.deleteMany({});
+  await prisma.ledgerAccount.deleteMany({});
   await prisma.p2pTransfer.deleteMany({});
   await prisma.merchantTransaction.deleteMany({});
   await prisma.onRampTransaction.deleteMany({});
@@ -15,7 +24,7 @@ async function main() {
   await prisma.merchant.deleteMany({});
   await prisma.user.deleteMany({});
 
-  console.log("Database cleared successfully. Seeding requested entries...");
+  console.log("Database cleared successfully. Seeding requested entries with Double-Entry Ledger...");
 
   const hash123 = await bcrypt.hash("123", 10);
   const hash456 = await bcrypt.hash("456", 10);
@@ -84,6 +93,51 @@ async function main() {
     },
   });
 
+  // 3. Provision Ledger Accounts
+  const bankEscrowAccountId = await getOrCreateSystemAccount(prisma, "BANK_ESCROW");
+  const user123AccountId = await getOrCreateUserAccount(prisma, user123.id);
+  const user456AccountId = await getOrCreateUserAccount(prisma, user456.id);
+  const merchant123AccountId = await getOrCreateMerchantAccount(prisma, merchant123.id);
+  const merchant456AccountId = await getOrCreateMerchantAccount(prisma, merchant456.id);
+
+  // 4. Record Initial Balanced Capitalization Journal Entry
+  // Total initial money = ₹2,000 (200,000 paise).
+  // Debit: Bank Escrow (Asset) = +200,000
+  // Credit: 4 Accounts x 50,000 (Liabilities) = +200,000
+  // Total Debits (200,000) === Total Credits (200,000)
+  await postJournalEntry(prisma, {
+    referenceId: "seed_initial_capitalization",
+    eventType: JournalEventType.ONRAMP_DEPOSIT,
+    description: "Initial platform capitalization and seed wallet funding",
+    entries: [
+      {
+        accountId: bankEscrowAccountId,
+        direction: EntryDirection.DEBIT,
+        amount: 200000, // ₹2,000.00 in Bank Escrow
+      },
+      {
+        accountId: user123AccountId,
+        direction: EntryDirection.CREDIT,
+        amount: 50000, // ₹500.00 to User 123
+      },
+      {
+        accountId: user456AccountId,
+        direction: EntryDirection.CREDIT,
+        amount: 50000, // ₹500.00 to User 456
+      },
+      {
+        accountId: merchant123AccountId,
+        direction: EntryDirection.CREDIT,
+        amount: 50000, // ₹500.00 to Merchant 123
+      },
+      {
+        accountId: merchant456AccountId,
+        direction: EntryDirection.CREDIT,
+        amount: 50000, // ₹500.00 to Merchant 456
+      },
+    ],
+  });
+
   console.log("Seeding complete! Available entries:");
   console.log("-----------------------------------------");
   console.log("Entry 1:");
@@ -98,6 +152,7 @@ async function main() {
   console.log("  User ID             :", user456.id);
   console.log("  Merchant ID         :", merchant456.id);
   console.log("-----------------------------------------");
+  console.log("Double-Entry Ledger initialized and 100% balanced.");
 }
 
 main()

@@ -21,6 +21,7 @@ model User {
   receivedTransfers p2pTransfer[] @relation(name: "ToUserRelation")
   Merchant Merchant[]
   MerchantTransaction MerchantTransaction[]
+  LedgerAccount LedgerAccount?
 }
 
 model MerchantTransaction {
@@ -44,6 +45,7 @@ model Merchant {
   user User? @relation(fields: [userId], references: [id])
   transactions MerchantTransaction[]
   MerchantBalance MerchantBalance?
+  LedgerAccount LedgerAccount?
 }
 
 enum AuthType {
@@ -112,3 +114,66 @@ enum TransactionStatus {
   Failure
   Processing
 }
+
+// ==========================================
+// DOUBLE-ENTRY BOOKKEEPING LEDGER MODELS
+// ==========================================
+
+enum LedgerAccountType {
+  USER_WALLET
+  MERCHANT_WALLET
+  BANK_ESCROW
+  PLATFORM_REVENUE
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+enum JournalEventType {
+  ONRAMP_DEPOSIT
+  P2P_TRANSFER
+  MERCHANT_PAYMENT
+  FEE_DEDUCTION
+}
+
+model LedgerAccount {
+  id          Int               @id @default(autoincrement())
+  accountType LedgerAccountType
+  userId      Int?              @unique
+  user        User?             @relation(fields: [userId], references: [id])
+  merchantId  Int?              @unique
+  merchant    Merchant?         @relation(fields: [merchantId], references: [id])
+  currency    String            @default("INR")
+  entries     LedgerEntry[]
+  createdAt   DateTime          @default(now())
+
+  @@index([accountType])
+}
+
+model JournalEntry {
+  id          String           @id @default(uuid())
+  referenceId String           @unique // Idempotency key / External transaction reference
+  eventType   JournalEventType
+  description String?
+  entries     LedgerEntry[]
+  createdAt   DateTime         @default(now())
+
+  @@index([eventType])
+}
+
+model LedgerEntry {
+  id             String         @id @default(uuid())
+  journalEntryId String
+  journalEntry   JournalEntry   @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      Int
+  account        LedgerAccount  @relation(fields: [accountId], references: [id])
+  direction      EntryDirection
+  amount         Int            // Positive integer in smallest currency unit (paise)
+  createdAt      DateTime       @default(now())
+
+  @@index([accountId])
+  @@index([journalEntryId])
+}
+

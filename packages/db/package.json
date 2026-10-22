@@ -2,7 +2,8 @@
     "name": "@repo/db",
     "version": "0.0.0",
     "scripts": {
-        "seed": "prisma db seed"
+        "seed": "prisma db seed",
+        "reconcile": "ts-node scripts/reconcile.ts"
     },
     "dependencies": {
         "@prisma/client": "^6.4.1"
@@ -11,7 +12,8 @@
         "prisma": "^6.4.1"
     },
     "exports": {
-        "./client": "./index.ts"
+        "./client": "./index.ts",
+        "./ledger": "./ledger/index.ts"
     },
     "prisma": {
         "seed": "ts-node prisma/seed.ts"
