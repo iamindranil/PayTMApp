@@ -3,10 +3,12 @@
     "version": "0.0.0",
     "scripts": {
         "seed": "prisma db seed",
-        "reconcile": "ts-node scripts/reconcile.ts"
+        "reconcile": "ts-node scripts/reconcile.ts",
+        "test:queue": "ts-node -T scripts/test-bullmq.ts"
     },
     "dependencies": {
-        "@prisma/client": "^6.4.1"
+        "@prisma/client": "^6.4.1",
+        "@repo/queue": "*"
     },
     "devDependencies": {
         "prisma": "^6.4.1"

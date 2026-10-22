@@ -56,9 +56,14 @@ graph TD
   ```
 * Ensures balance checks and deductions occur atomically, strictly preventing double-spending even under high concurrent load.
 
-### 2. Resilient Async Retry Queue
-* The `p2p-cron-worker` monitors transient or pending transfers.
-* Automatically schedules retries with an **exponential backoff policy** (`[1, 3, 5]` minutes) up to 3 attempts before marking a transfer as `Failure`.
+### 3. Event-Driven Distributed Retry Queue (BullMQ + Redis)
+* Replaces naive database polling with a high-throughput, event-driven architecture using **BullMQ** and **Redis**.
+* Transient transfer failures are offloaded to Redis with **exponential backoff** (`[1, 2, 4]` minutes) and concurrency-safe worker locks.
+* Unrecovered transfers are safely transitioned to a **Dead Letter Queue (DLQ)** after 3 attempts, setting status to `Failure` in PostgreSQL.
+* Features a live administrative dashboard via **Bull-Board** hosted at:
+  ```text
+  http://localhost:4000/admin/queues
+  ```
 
 ### 3. Merchant Invoice & QR Settlement Workflow
 * Merchants issue on-demand payment requests with real-time status tracking.
