@@ -4,34 +4,19 @@ const app = express();
 app.use(express.json());
 
 app.post("/hdfcWebhook", async (req, res) => {
-  //zod
-  //add web-hook secret here
-  const paymentInformation: { token: string; userId: string; amount: string } =
-    {
-      token: req.body.token,
-      userId: req.body.user_identifier,
-      amount: req.body.amount,
-    };
-  //imperfect approach to update balance
-  /*
-        const balance=db.balance.findFirst({
-            where:{
-                userId:paymentInformation.userId
-            }
-        })
-        db.balance.update({
-            where:{
-                userId:paymentInformation.userId
-            },
-            data:{
-                amount:balance+paymentInformation.amount
-            }
-        })
-        ************if two requests come very quickly then data-inconsistency may happen*************
-    */
-  //perfect approach to update balance
+  const paymentInformation: { token: string; userId: string; amount: string } = {
+    token: req.body.token,
+    userId: req.body.user_identifier,
+    amount: req.body.amount,
+  };
 
-  //need to use transaction
+  if (!paymentInformation.token || !paymentInformation.userId || !paymentInformation.amount) {
+    res.status(400).json({
+      message: "Invalid webhook payload",
+    });
+    return;
+  }
+
   try {
     await db.$transaction([
       db.balance.updateMany({
@@ -53,12 +38,12 @@ app.post("/hdfcWebhook", async (req, res) => {
         },
       }),
     ]);
-    res.status(411).json({
+    res.status(200).json({
       message: "captured",
     });
   } catch (e) {
-    console.error(e);
-    res.status(400).json({
+    console.error("Webhook processing error:", e);
+    res.status(500).json({
       message: "Error while processing webhook",
     });
   }

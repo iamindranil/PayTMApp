@@ -7,7 +7,7 @@ export default function QRPayPage() {
   const params = useParams();
   const requestId = params?.nextauth?.[0]; // this gets the request ID from the URL
 
-  const qrContent = `paytm-qr://requestId=${requestId}`;
+  const qrContent = `turbopay://pay?requestId=${requestId}`;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">

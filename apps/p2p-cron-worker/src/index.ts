@@ -1,19 +1,17 @@
-import express from 'express'
+import express from 'express';
 import db from "@repo/db/client";
-import corn from 'node-cron';
-import {transferMoney} from '../../user-app/app/lib/moneyTransfer/transfer'
+import cron from 'node-cron';
+import { transferMoney } from '../../user-app/app/lib/moneyTransfer/transfer';
 
+const app = express();
 
-const app=express();
+app.listen(4000, () => {
+    console.log('Cron worker listening on port 4000');
+});
 
+const RETRY_GAPS = [1, 3, 5];
 
-app.listen(4000,()=>{
-    console.log('cron Worker listening on port 4000')
-})
-
-const RETRY_GAPS=[1,3,5];
-
-corn.schedule('* * * * *',async()=>{
+cron.schedule('* * * * *', async () => {
     try{
         const now=new Date();
         //find transfers having retryAt just now
@@ -34,10 +32,8 @@ corn.schedule('* * * * *',async()=>{
             return;
         }
 
-        for(const transfer of transfers){
-            //retryLogic
-            // console.log("stated retry")
-            const fromUserID=String(transfer.fromUserId);
+        for (const transfer of transfers) {
+            const fromUserID = String(transfer.fromUserId);
             const toUserID=transfer.toUserId;
             const amt=transfer.amount;
             const newRetryCount=transfer.retryCount+1;

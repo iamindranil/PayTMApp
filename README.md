@@ -1,81 +1,161 @@
-# Turborepo starter
+# 💳 TurboPayment
 
-This is an official starter Turborepo.
+> A high-throughput, full-stack digital wallet and merchant settlement platform built with **Turborepo**, **Next.js 14**, **PostgreSQL**, **Prisma**, and **Express.js**.
 
-## Using this example
+---
 
-Run the following command:
+## 🏗 Architecture Overview
 
-```sh
-npx create-turbo@latest
+```mermaid
+graph TD
+    subgraph Clients["Frontend Applications"]
+        UserApp["User App (Next.js)<br/>Port 3001"]
+        MerchantApp["Merchant Portal (Next.js)<br/>Port 3000"]
+    end
+
+    subgraph Backend["Backend Services"]
+        BankWebhook["Bank Webhook Service (Express)<br/>Port 3003"]
+        CronWorker["P2P Retry Worker (Node-Cron)<br/>Port 4000"]
+    end
+
+    subgraph Shared["Monorepo Shared Packages"]
+        RepoDB["@repo/db (Prisma ORM)"]
+        RepoUI["@repo/ui (React Component Library)"]
+        RepoStore["@repo/store (Recoil State)"]
+    end
+
+    subgraph Data["Database Layer"]
+        Postgres[(PostgreSQL)]
+    end
+
+    UserApp --> RepoDB
+    UserApp --> RepoUI
+    UserApp --> RepoStore
+    MerchantApp --> RepoDB
+    MerchantApp --> RepoUI
+    BankWebhook --> RepoDB
+    CronWorker --> RepoDB
+    RepoDB --> Postgres
 ```
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## ⚡ Key Engineering Highlights
 
-### Apps and Packages
+### 1. Concurrency Control & Double-Spending Prevention
+* P2P money transfers execute inside interactive database transactions with **PostgreSQL row-level locking**:
+  ```sql
+  SELECT * FROM "Balance" WHERE "userId" = $1 FOR UPDATE
+  ```
+* Ensures balance checks and deductions occur atomically, strictly preventing double-spending even under high concurrent load.
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+### 2. Resilient Async Retry Queue
+* The `p2p-cron-worker` monitors transient or pending transfers.
+* Automatically schedules retries with an **exponential backoff policy** (`[1, 3, 5]` minutes) up to 3 attempts before marking a transfer as `Failure`.
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+### 3. Merchant Invoice & QR Settlement Workflow
+* Merchants issue on-demand payment requests with real-time status tracking.
+* Generates standard `turbopay://` payloads for instant QR scanning and automated merchant balance crediting.
 
-### Utilities
+### 4. Monorepo Modularity
+* Managed with **Turborepo** for optimized caching and fast parallel builds.
+* Centralized Prisma ORM package (`@repo/db`), design system (`@repo/ui`), and TypeScript configurations across all micro-frontends and services.
 
-This Turborepo has some additional tools already setup for you:
+---
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+## 📦 Service & Port Mapping
 
-### Build
+| Service | Directory | Tech Stack | Port | Description |
+|---|---|---|---|---|
+| **Merchant Portal** | `apps/merchant-app` | Next.js 14 (App Router), Tailwind CSS | `3000` | Merchant dashboard, invoice creation & settlement history |
+| **User Wallet** | `apps/user-app` | Next.js 14 (App Router), NextAuth | `3001` | Balance viewer, bank top-up, P2P transfers & QR pay |
+| **Bank Webhook** | `apps/bank-webhook` | Express.js, TypeScript | `3003` | Simulates bank callbacks (`/hdfcWebhook`) & settlement APIs |
+| **Retry Worker** | `apps/p2p-cron-worker` | Node-cron, Express.js | `4000` | Background cron worker for retrying pending P2P transfers |
+| **Database ORM** | `packages/db` | Prisma, PostgreSQL | — | Shared database schema, migrations & seed script |
+| **Design System** | `packages/ui` | React, Tailwind CSS | — | Reusable UI component library |
 
-To build all apps and packages, run the following command:
+---
 
+## 🚀 Getting Started
+
+### Prerequisites
+* **Node.js**: `>= 18.0.0`
+* **npm**: `>= 10.0.0`
+* **PostgreSQL**: Local instance or Docker container running on port `5432`
+
+---
+
+### Step 1: Clone & Configure Environment Variables
+
+```bash
+# Clone the repository
+git clone <repo-url>
+cd TurboPayment/payTM
+
+# Copy environment templates
+cp packages/db/.env.example packages/db/.env
+cp apps/user-app/.env.example apps/user-app/.env
+cp apps/merchant-app/.env.example apps/merchant-app/.env
 ```
-cd my-turborepo
-pnpm build
+
+Ensure your `packages/db/.env` points to your PostgreSQL database:
+```env
+DATABASE_URL="postgresql://postgres:password@localhost:5432/turbopayment"
 ```
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
+### Step 2: Install Dependencies
 
-```
-cd my-turborepo
-pnpm dev
-```
-
-### Remote Caching
-
-Turborepo can use a technique known as [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup), then enter the following commands:
-
-```
-cd my-turborepo
-npx turbo login
+```bash
+npm install
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+---
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+### Step 3: Initialize Database & Seed Demo Data
 
+```bash
+# Run Prisma migrations
+cd packages/db
+npx prisma migrate dev --name init
+
+# Seed test accounts & initial balances
+npm run seed
+cd ../..
 ```
-npx turbo link
+
+#### 🔑 Pre-Configured Demo Credentials:
+| Role | Identifier / Phone | Password | Initial Balance |
+|---|---|---|---|
+| **Customer 1 (Alice)** | `1111111111` | `password123` | ₹500.00 |
+| **Customer 2 (Bob)** | `2222222222` | `password123` | ₹250.00 |
+| **Merchant (TechMart)** | `9999999999` | `password123` | ₹1,000.00 |
+
+---
+
+### Step 4: Run the Development Environment
+
+Start all micro-apps and background workers concurrently:
+
+```bash
+npm run dev
 ```
 
-## Useful Links
+Visit:
+* **Customer Wallet**: [http://localhost:3001](http://localhost:3001)
+* **Merchant Portal**: [http://localhost:3000](http://localhost:3000)
 
-Learn more about the power of Turborepo:
+---
 
-- [Tasks](https://turbo.build/repo/docs/core-concepts/monorepos/running-tasks)
-- [Caching](https://turbo.build/repo/docs/core-concepts/caching)
-- [Remote Caching](https://turbo.build/repo/docs/core-concepts/remote-caching)
-- [Filtering](https://turbo.build/repo/docs/core-concepts/monorepos/filtering)
-- [Configuration Options](https://turbo.build/repo/docs/reference/configuration)
-- [CLI Usage](https://turbo.build/repo/docs/reference/command-line-reference)
+## 🛠 Available Scripts
+
+* `npm run dev`: Launch all applications in parallel via Turborepo
+* `npm run build`: Build production bundles across all packages
+* `npm run lint`: Execute ESLint checks across the monorepo
+* `npm run format`: Format TypeScript and Markdown files with Prettier
+
+---
+
+## 📄 License
+This project is open-source and available under the [MIT License](LICENSE).
