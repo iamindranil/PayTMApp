@@ -7,8 +7,8 @@ import { AppbarClient } from "../components/AppbarClient";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MyPaytmWallet",
-  description: "Simple wallet app",
+  title: "TurboPay - Fast & Secure Digital Wallet",
+  description: "Peer-to-peer payments, instant bank transfers, and wallet management.",
 };
 
 export default function RootLayout({

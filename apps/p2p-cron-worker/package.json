@@ -13,12 +13,14 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@bull-board/api": "^6.7.0",
+    "@bull-board/express": "^6.7.0",
+    "@repo/db": "*",
+    "@repo/queue": "*",
     "@types/express": "^5.0.1",
+    "bullmq": "^5.41.0",
     "esbuild": "^0.25.3",
-    "express": "^5.1.0",
-    "node-cron": "^3.0.3"
-  },
-  "devDependencies": {
-    "@types/node-cron": "^3.0.11"
+    "express": "^4.21.2",
+    "ioredis": "^5.5.0"
   }
 }
