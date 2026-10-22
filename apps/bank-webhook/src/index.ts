@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import db, {
   getOrCreateSystemAccount,
@@ -6,15 +7,54 @@ import db, {
   postJournalEntry,
 } from "@repo/db/client";
 import { EntryDirection, JournalEventType } from "@prisma/client";
+import {
+  verifyWebhookSignature,
+  DEFAULT_WEBHOOK_SECRET,
+} from "./security";
 
-const app = express();
-app.use(express.json());
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
+  }
+}
+
+export const app = express();
+
+// Preserve exact raw byte buffer for cryptographic HMAC-SHA256 verification
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
+
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || DEFAULT_WEBHOOK_SECRET;
 
 app.post("/hdfcWebhook", async (req, res) => {
+  // 1. Cryptographic HMAC-SHA256 Signature Verification
+  const signatureHeader =
+    req.headers["x-webhook-signature"] || req.headers["x-signature"];
+  const verification = verifyWebhookSignature(
+    req.rawBody,
+    signatureHeader,
+    WEBHOOK_SECRET
+  );
+
+  if (!verification.isValid) {
+    res.status(verification.statusCode || 401).json({
+      message: verification.error || "Unauthorized webhook request",
+    });
+    return;
+  }
+
+  // 2. Validate payload structure
   const paymentInformation: { token: string; userId: string; amount: string } = {
-    token: req.body.token,
-    userId: req.body.user_identifier,
-    amount: req.body.amount,
+    token: req.body?.token,
+    userId: req.body?.user_identifier,
+    amount: req.body?.amount,
   };
 
   const userId = Number(paymentInformation.userId);
@@ -28,8 +68,40 @@ app.post("/hdfcWebhook", async (req, res) => {
   }
 
   try {
-    await db.$transaction(async (tx) => {
-      // 1. Double-Entry Ledger: Money arrives from partner bank into escrow
+    const result = await db.$transaction(async (tx) => {
+      // 3. Strict Idempotency Check: Look up onRampTransaction by token
+      const existingTx = await tx.onRampTransaction.findUnique({
+        where: {
+          token: paymentInformation.token,
+        },
+      });
+
+      if (!existingTx) {
+        return { status: 404, message: "Transaction token not found" };
+      }
+
+      // Idempotency: If already settled, acknowledge safely without double-crediting
+      if (existingTx.status === "Success") {
+        return {
+          status: 200,
+          message: "Transaction already processed",
+          idempotent: true,
+        };
+      }
+
+      if (existingTx.status === "Failure") {
+        return { status: 400, message: "Cannot capture failed transaction" };
+      }
+
+      // Security Check: Verify user and amount match initiated deposit record
+      if (existingTx.userId !== userId || existingTx.amount !== amount) {
+        return {
+          status: 400,
+          message: "Payload user or amount does not match transaction record",
+        };
+      }
+
+      // 4. Double-Entry Ledger: Money arrives from partner bank into escrow
       // Debit: Bank Escrow (Asset +)
       // Credit: User Wallet (Liability +)
       const bankEscrowId = await getOrCreateSystemAccount(tx, "BANK_ESCROW");
@@ -53,7 +125,7 @@ app.post("/hdfcWebhook", async (req, res) => {
         ],
       });
 
-      // 2. Update fast-read cached balances
+      // 5. Update fast-read cached balances
       await tx.balance.upsert({
         where: { userId },
         update: {
@@ -68,8 +140,8 @@ app.post("/hdfcWebhook", async (req, res) => {
         },
       });
 
-      // 3. Mark OnRamp transaction as Success
-      await tx.onRampTransaction.updateMany({
+      // 6. Mark OnRamp transaction as Success
+      await tx.onRampTransaction.update({
         where: {
           token: paymentInformation.token,
         },
@@ -77,10 +149,13 @@ app.post("/hdfcWebhook", async (req, res) => {
           status: "Success",
         },
       });
+
+      return { status: 200, message: "captured", idempotent: false };
     });
 
-    res.status(200).json({
-      message: "captured",
+    res.status(result.status).json({
+      message: result.message,
+      ...(result.idempotent ? { idempotent: true } : {}),
     });
   } catch (e) {
     console.error("Webhook processing error:", e);
@@ -220,6 +295,9 @@ app.post("/payWithQR", async (req, res) => {
   }
 });
 
-app.listen(3003, () => {
-  console.log("Bank webhook microservice listening on port 3003");
-});
+const PORT = process.env.PORT || 3003;
+if (process.env.NODE_ENV !== "test") {
+  app.listen(PORT, () => {
+    console.log(`Bank webhook microservice listening on port ${PORT}`);
+  });
+}

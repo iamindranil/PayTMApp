@@ -4,7 +4,8 @@
     "scripts": {
         "seed": "prisma db seed",
         "reconcile": "ts-node scripts/reconcile.ts",
-        "test:queue": "ts-node -T scripts/test-bullmq.ts"
+        "test:queue": "ts-node -T scripts/test-bullmq.ts",
+        "test:webhook": "ts-node -T scripts/test-webhook-security.ts"
     },
     "dependencies": {
         "@prisma/client": "^6.4.1",

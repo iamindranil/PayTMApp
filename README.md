@@ -65,13 +65,24 @@ graph TD
   http://localhost:4000/admin/queues
   ```
 
-### 3. Merchant Invoice & QR Settlement Workflow
+### 4. Webhook HMAC-SHA256 Signature Security & Idempotency
+* Secures bank callbacks (`POST /hdfcWebhook`) using Stripe/Razorpay-grade cryptographic signing:
+  $$\text{HMAC-SHA256}(\text{timestamp} + "." + \text{rawBody}, \text{WEBHOOK\_SECRET})$$
+* **Constant-Time Verification**: Defeats side-channel timing attacks using `crypto.timingSafeEqual()`.
+* **Replay Attack Defense**: Rejects requests outside a 5-minute freshness window ($\le 300\text{s}$).
+* **Strict Idempotency**: Safely handles duplicate webhook deliveries (`200 OK`) without double-crediting balances or posting duplicate ledger entries.
+* Includes an automated attack simulation test suite:
+  ```bash
+  npm run test:webhook
+  ```
+
+### 5. Merchant Invoice & QR Settlement Workflow
 * Merchants issue on-demand payment requests with real-time status tracking.
 * Generates standard `turbopay://` payloads for instant QR scanning and automated merchant balance crediting.
 
-### 4. Monorepo Modularity
+### 6. Monorepo Modularity
 * Managed with **Turborepo** for optimized caching and fast parallel builds.
-* Centralized Prisma ORM package (`@repo/db`), design system (`@repo/ui`), and TypeScript configurations across all micro-frontends and services.
+* Centralized Prisma ORM package (`@repo/db`), distributed queue package (`@repo/queue`), design system (`@repo/ui`), and TypeScript configurations across all micro-frontends and services.
 
 ---
 
@@ -81,9 +92,10 @@ graph TD
 |---|---|---|---|---|
 | **Merchant Portal** | `apps/merchant-app` | Next.js 14 (App Router), Tailwind CSS | `3000` | Merchant dashboard, invoice creation & settlement history |
 | **User Wallet** | `apps/user-app` | Next.js 14 (App Router), NextAuth | `3001` | Balance viewer, bank top-up, P2P transfers & QR pay |
-| **Bank Webhook** | `apps/bank-webhook` | Express.js, TypeScript | `3003` | Simulates bank callbacks (`/hdfcWebhook`) & settlement APIs |
-| **Retry Worker** | `apps/p2p-cron-worker` | Node-cron, Express.js | `4000` | Background cron worker for retrying pending P2P transfers |
-| **Database ORM** | `packages/db` | Prisma, PostgreSQL | — | Shared database schema, migrations & seed script |
+| **Bank Webhook** | `apps/bank-webhook` | Express.js, TypeScript | `3003` | HMAC-SHA256 authenticated webhook (`/hdfcWebhook`) & QR settlements |
+| **Retry Worker** | `apps/p2p-cron-worker` | BullMQ, Redis, Bull-Board, Express | `4000` | BullMQ worker with exponential backoff & Bull-Board UI (`/admin/queues`) |
+| **Database ORM** | `packages/db` | Prisma, PostgreSQL | — | Shared database schema, ledger accounting & migrations |
+| **Queue Package** | `packages/queue` | BullMQ, IORedis | — | Shared Redis connection, retry job queues & producers |
 | **Design System** | `packages/ui` | React, Tailwind CSS | — | Reusable UI component library |
 
 ---
@@ -165,6 +177,8 @@ Visit:
 * `npm run dev`: Launch all applications in parallel via Turborepo
 * `npm run build`: Build production bundles across all packages
 * `npm run lint`: Execute ESLint checks across the monorepo
+* `npm run reconcile`: Execute the automated Double-Entry Bookkeeping audit reconciler
+* `npm run test:webhook`: Execute the 7-scenario cryptographic HMAC security & attack simulation suite
 * `npm run format`: Format TypeScript and Markdown files with Prettier
 
 ---
